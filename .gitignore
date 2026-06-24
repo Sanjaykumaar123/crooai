@@ -48,3 +48,8 @@ agentchain.db-journal
 /cache/
 /artifacts/
 
+# python cache
+__pycache__/
+*.pyc
+
+
