@@ -5,6 +5,7 @@ from backend.services.supabase_service import init_db
 from backend.api.agents import router as agents_router
 from backend.api.executions import router as executions_router
 from backend.api.marketplace import router as marketplace_router
+from backend.api.a2a import router as a2a_router
 
 # Initialize database tables
 print("[FastAPI] Initializing Database Schema...")
@@ -29,6 +30,7 @@ app.add_middleware(
 app.include_router(agents_router)
 app.include_router(executions_router)
 app.include_router(marketplace_router)
+app.include_router(a2a_router)
 
 @app.get("/")
 def read_root():

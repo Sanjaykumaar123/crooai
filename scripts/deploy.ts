@@ -39,7 +39,7 @@ async function main() {
   // 5. Deploy Escrow Contract (links to Registry, Reputation, and ExecutionLog)
   console.log("Deploying Escrow...");
   const Escrow = await ethers.getContractFactory("Escrow");
-  const escrow = await Escrow.deploy(registryAddress, reputationAddress, executionLogAddress);
+  const escrow = await Escrow.deploy(registryAddress);
   await escrow.waitForDeployment();
   const escrowAddress = await escrow.getAddress();
   console.log(`Escrow deployed to: ${escrowAddress}`);
@@ -59,6 +59,29 @@ async function main() {
   const logAuthTx = await executionLog.setAuthorizedCaller(escrowAddress, true);
   await logAuthTx.wait();
   console.log("Escrow authorized in ExecutionLog successfully.");
+
+  // 7. Register default agents in AgentRegistry so they exist and are active on-chain
+  console.log("\nRegistering default agents in AgentRegistry...");
+  const agentsToRegister = [
+    { name: "Research Agent", category: "Research", price: "0.02" },
+    { name: "News Agent", category: "Data", price: "0.015" },
+    { name: "Analytics Agent", category: "Analytics", price: "0.025" },
+    { name: "Verification Agent", category: "Utility", price: "0.018" },
+    { name: "Report Agent", category: "Content", price: "0.015" },
+    { name: "Code Review Agent", category: "Development", price: "0.022" }
+  ];
+
+  for (const agent of agentsToRegister) {
+    console.log(`Registering ${agent.name}...`);
+    const tx = await registry.registerAgent(
+      agent.name,
+      agent.category,
+      `https://agentchain.ai/metadata/${agent.name.toLowerCase().replace(/\s+/g, '-')}`,
+      ethers.parseEther(agent.price)
+    );
+    await tx.wait();
+  }
+  console.log("Default agents registered successfully!");
 
   console.log("\n--- Deployment Complete ---");
   console.log({

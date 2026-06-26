@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import DashboardSidebar from '@/components/DashboardSidebar';
+import WalletGate from '@/components/WalletGate';
 import { BarChart3, TrendingUp, Cpu, Workflow, Layers, ArrowUpRight, ShieldCheck } from 'lucide-react';
 
 export default function AnalyticsPage() {
@@ -39,198 +40,203 @@ export default function AnalyticsPage() {
   ];
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#FFFDF5]">
-      <Header />
+    <WalletGate 
+      title="Connect Wallet to View Analytics" 
+      description="Connect your Web3 MetaMask wallet to view on-chain network analytics and gas consumption telemetry."
+    >
+      <div className="flex min-h-screen flex-col bg-[#FFFDF5]">
+        <Header />
 
-      <main className="flex-1 mx-auto w-full max-w-[95%] px-4 sm:px-6 lg:px-8 py-10">
-        <div className="flex flex-col md:flex-row gap-8">
-          
-          {/* Dashboard Sidebar */}
-          <DashboardSidebar activeTab="analytics" />
-
-          {/* Analytics Dashboard Content */}
-          <div className="flex-1 min-w-0 space-y-6">
+        <main className="flex-1 mx-auto w-full max-w-[95%] px-4 sm:px-6 lg:px-8 py-10">
+          <div className="flex flex-col md:flex-row gap-8">
             
-            {/* Page Header */}
-            <div>
-              <h1 className="font-heading text-2xl font-extrabold text-brand-text-dark flex items-center gap-2">
-                <BarChart3 className="text-brand-yellow" />
-                <span>On-Chain Network Analytics</span>
-              </h1>
-              <p className="text-xs text-brand-text-muted mt-1">
-                Monitor real-time network volume, growth charts, A2A latency distributions, and revenue settlements.
-              </p>
-            </div>
+            {/* Dashboard Sidebar */}
+            <DashboardSidebar activeTab="analytics" />
 
-            {/* Metrics cards grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {[
-                { title: 'Total Volume', value: '4.85 CROO', desc: '+18.4% month-over-month', icon: TrendingUp, color: 'text-amber-500 bg-amber-50' },
-                { title: 'Total API Calls', value: '3,248', desc: '+8.1% weekly increase', icon: Cpu, color: 'text-purple-500 bg-purple-50' },
-                { title: 'A2A Handoffs', value: '840 Tasks', desc: 'Secure peer negotiations', icon: Workflow, color: 'text-indigo-500 bg-indigo-50' },
-                { title: 'Avg SLA Latency', value: '480 ms', desc: 'Optimized execution times', icon: Layers, color: 'text-emerald-500 bg-emerald-50' }
-              ].map((m, i) => {
-                const Icon = m.icon;
-                return (
-                  <div key={i} className="p-5 glass-card rounded-2xl hover-lift">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-brand-text-muted uppercase tracking-wider">{m.title}</span>
-                      <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${m.color}`}>
-                        <Icon size={16} />
+            {/* Analytics Dashboard Content */}
+            <div className="flex-1 min-w-0 space-y-6">
+              
+              {/* Page Header */}
+              <div>
+                <h1 className="font-heading text-2xl font-extrabold text-brand-text-dark flex items-center gap-2">
+                  <BarChart3 className="text-brand-yellow" />
+                  <span>On-Chain Network Analytics</span>
+                </h1>
+                <p className="text-xs text-brand-text-muted mt-1">
+                  Monitor real-time network volume, growth charts, A2A latency distributions, and revenue settlements.
+                </p>
+              </div>
+
+              {/* Metrics cards grid */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { title: 'Total Volume', value: '4.85 CROO', desc: '+18.4% month-over-month', icon: TrendingUp, color: 'text-amber-500 bg-amber-50' },
+                  { title: 'Total API Calls', value: '3,248', desc: '+8.1% weekly increase', icon: Cpu, color: 'text-purple-500 bg-purple-50' },
+                  { title: 'A2A Handoffs', value: '840 Tasks', desc: 'Secure peer negotiations', icon: Workflow, color: 'text-indigo-500 bg-indigo-50' },
+                  { title: 'Avg SLA Latency', value: '480 ms', desc: 'Optimized execution times', icon: Layers, color: 'text-emerald-500 bg-emerald-50' }
+                ].map((m, i) => {
+                  const Icon = m.icon;
+                  return (
+                    <div key={i} className="p-5 glass-card rounded-2xl hover-lift">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-brand-text-muted uppercase tracking-wider">{m.title}</span>
+                        <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${m.color}`}>
+                          <Icon size={16} />
+                        </div>
+                      </div>
+                      <p className="font-heading text-xl font-extrabold text-brand-text-dark mt-4">{m.value}</p>
+                      <span className="text-[10px] text-brand-text-muted mt-1 block">{m.desc}</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Big Interactive Chart Card */}
+              <div className="glass-card rounded-2xl p-6 space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-neutral-100 pb-4 gap-4">
+                  <h3 className="font-heading text-xs font-bold text-brand-text-dark uppercase tracking-wider">Network Growth Charts</h3>
+                  
+                  {/* Chart Selector Tab */}
+                  <div className="flex rounded-xl bg-neutral-50 p-1 border border-neutral-200 self-start">
+                    {[
+                      { id: 'revenue', label: 'Revenue (CROO)' },
+                      { id: 'calls', label: 'API Calls' },
+                      { id: 'handoffs', label: 'A2A Activity' }
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setChartTab(tab.id as any)}
+                        className={`rounded-lg px-3.5 py-1.5 text-[10px] font-bold transition-all ${
+                          chartTab === tab.id
+                            ? 'bg-white text-brand-text-dark shadow-sm'
+                            : 'text-brand-text-muted hover:text-brand-text-dark'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Chart Canvas Rendering */}
+                <div className="h-56 relative w-full pt-4">
+                  {chartTab === 'revenue' && (
+                    <div className="w-full h-full relative animate-in fade-in duration-300">
+                      {/* SVG Line / Bar combo */}
+                      <svg className="w-full h-full" viewBox="0 0 500 200" preserveAspectRatio="none">
+                        <defs>
+                          <linearGradient id="chartGradBlue" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.3" />
+                            <stop offset="100%" stopColor="#FFFDF5" stopOpacity="0.0" />
+                          </linearGradient>
+                        </defs>
+                        <line x1="0" y1="50" x2="500" y2="50" stroke="#FFF6D1" strokeWidth="0.5" strokeDasharray="5,5" />
+                        <line x1="0" y1="100" x2="500" y2="100" stroke="#FFF6D1" strokeWidth="0.5" strokeDasharray="5,5" />
+                        <line x1="0" y1="150" x2="500" y2="150" stroke="#FFF6D1" strokeWidth="0.5" strokeDasharray="5,5" />
+                        
+                        {/* Curve */}
+                        <path
+                          d="M 10 160 Q 120 120 250 80 T 490 30"
+                          fill="none"
+                          stroke="#FBBF24"
+                          strokeWidth="3.5"
+                        />
+                        <path
+                          d="M 10 160 Q 120 120 250 80 T 490 30 L 490 200 L 10 200 Z"
+                          fill="url(#chartGradBlue)"
+                        />
+                      </svg>
+                      <div className="flex justify-between text-[9px] font-bold text-brand-text-muted mt-2 px-2">
+                        <span>Jan</span>
+                        <span>Feb</span>
+                        <span>Mar</span>
+                        <span>Apr</span>
+                        <span>May</span>
+                        <span>Jun (Current)</span>
                       </div>
                     </div>
-                    <p className="font-heading text-xl font-extrabold text-brand-text-dark mt-4">{m.value}</p>
-                    <span className="text-[10px] text-brand-text-muted mt-1 block">{m.desc}</span>
-                  </div>
-                );
-              })}
-            </div>
+                  )}
 
-            {/* Big Interactive Chart Card */}
-            <div className="glass-card rounded-2xl p-6 space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-neutral-100 pb-4 gap-4">
-                <h3 className="font-heading text-xs font-bold text-brand-text-dark uppercase tracking-wider">Network Growth Charts</h3>
-                
-                {/* Chart Selector Tab */}
-                <div className="flex rounded-xl bg-neutral-50 p-1 border border-neutral-200 self-start">
-                  {[
-                    { id: 'revenue', label: 'Revenue (CROO)' },
-                    { id: 'calls', label: 'API Calls' },
-                    { id: 'handoffs', label: 'A2A Activity' }
-                  ].map((tab) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setChartTab(tab.id as any)}
-                      className={`rounded-lg px-3.5 py-1.5 text-[10px] font-bold transition-all ${
-                        chartTab === tab.id
-                          ? 'bg-white text-brand-text-dark shadow-sm'
-                          : 'text-brand-text-muted hover:text-brand-text-dark'
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
+                  {chartTab === 'calls' && (
+                    <div className="w-full h-full relative animate-in fade-in duration-300 flex items-end justify-between px-6 pt-4">
+                      {/* SVG Columns representing volume calls */}
+                      {[80, 110, 140, 105, 160, 200, 185, 220].map((h, i) => (
+                        <div key={i} className="flex flex-col items-center flex-1 mx-2">
+                          <div 
+                            className="w-full rounded-t-lg bg-brand-yellow/30 border-t border-brand-yellow transition-all duration-500 hover:bg-brand-yellow"
+                            style={{ height: `${h * 0.65}px` }}
+                          />
+                          <span className="text-[9px] font-bold text-brand-text-muted mt-2">W{i + 1}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {chartTab === 'handoffs' && (
+                    <div className="w-full h-full relative animate-in fade-in duration-300">
+                      {/* SVG Bezier loops indicating peer triggers */}
+                      <svg className="w-full h-full" viewBox="0 0 500 200">
+                        <path d="M 50 150 C 150 50, 250 50, 350 150" fill="none" stroke="#FBBF24" strokeWidth="2.5" strokeDasharray="5,5" />
+                        <circle cx="50" cy="150" r="6" fill="#FBBF24" />
+                        <circle cx="350" cy="150" r="6" fill="#FBBF24" />
+                        <circle r="4" fill="#8B5CF6">
+                          <animateMotion path="M 50 150 C 150 50, 250 50, 350 150" dur="3s" repeatCount="indefinite" />
+                        </circle>
+                        <text x="200" y="80" textAnchor="middle" className="fill-brand-text-muted text-[10px] font-semibold">Consensus Trigger Handoff</text>
+                      </svg>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Chart Canvas Rendering */}
-              <div className="h-56 relative w-full pt-4">
-                {chartTab === 'revenue' && (
-                  <div className="w-full h-full relative animate-in fade-in duration-300">
-                    {/* SVG Line / Bar combo */}
-                    <svg className="w-full h-full" viewBox="0 0 500 200" preserveAspectRatio="none">
-                      <defs>
-                        <linearGradient id="chartGradBlue" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.3" />
-                          <stop offset="100%" stopColor="#FFFDF5" stopOpacity="0.0" />
-                        </linearGradient>
-                      </defs>
-                      <line x1="0" y1="50" x2="500" y2="50" stroke="#FFF6D1" strokeWidth="0.5" strokeDasharray="5,5" />
-                      <line x1="0" y1="100" x2="500" y2="100" stroke="#FFF6D1" strokeWidth="0.5" strokeDasharray="5,5" />
-                      <line x1="0" y1="150" x2="500" y2="150" stroke="#FFF6D1" strokeWidth="0.5" strokeDasharray="5,5" />
-                      
-                      {/* Curve */}
-                      <path
-                        d="M 10 160 Q 120 120 250 80 T 490 30"
-                        fill="none"
-                        stroke="#FBBF24"
-                        strokeWidth="3.5"
-                      />
-                      <path
-                        d="M 10 160 Q 120 120 250 80 T 490 30 L 490 200 L 10 200 Z"
-                        fill="url(#chartGradBlue)"
-                      />
-                    </svg>
-                    <div className="flex justify-between text-[9px] font-bold text-brand-text-muted mt-2 px-2">
-                      <span>Jan</span>
-                      <span>Feb</span>
-                      <span>Mar</span>
-                      <span>Apr</span>
-                      <span>May</span>
-                      <span>Jun (Current)</span>
-                    </div>
-                  </div>
-                )}
-
-                {chartTab === 'calls' && (
-                  <div className="w-full h-full relative animate-in fade-in duration-300 flex items-end justify-between px-6 pt-4">
-                    {/* SVG Columns representing volume calls */}
-                    {[80, 110, 140, 105, 160, 200, 185, 220].map((h, i) => (
-                      <div key={i} className="flex flex-col items-center flex-1 mx-2">
-                        <div 
-                          className="w-full rounded-t-lg bg-brand-yellow/30 border-t border-brand-yellow transition-all duration-500 hover:bg-brand-yellow"
-                          style={{ height: `${h * 0.65}px` }}
-                        />
-                        <span className="text-[9px] font-bold text-brand-text-muted mt-2">W{i + 1}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {chartTab === 'handoffs' && (
-                  <div className="w-full h-full relative animate-in fade-in duration-300">
-                    {/* SVG Bezier loops indicating peer triggers */}
-                    <svg className="w-full h-full" viewBox="0 0 500 200">
-                      <path d="M 50 150 C 150 50, 250 50, 350 150" fill="none" stroke="#FBBF24" strokeWidth="2.5" strokeDasharray="5,5" />
-                      <circle cx="50" cy="150" r="6" fill="#FBBF24" />
-                      <circle cx="350" cy="150" r="6" fill="#FBBF24" />
-                      <circle r="4" fill="#8B5CF6">
-                        <animateMotion path="M 50 150 C 150 50, 250 50, 350 150" dur="3s" repeatCount="indefinite" />
-                      </circle>
-                      <text x="200" y="80" textAnchor="middle" className="fill-brand-text-muted text-[10px] font-semibold">Consensus Trigger Handoff</text>
-                    </svg>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* A2A Telemetry audit logs list */}
-            <div className="glass-card rounded-2xl p-6">
-              <h3 className="font-heading text-xs font-bold text-brand-text-dark uppercase tracking-wider mb-6">A2A Decentralized Call History</h3>
-              
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-brand-text-muted">
-                  <thead>
-                    <tr className="border-b border-neutral-100 pb-3 text-brand-text-dark font-bold">
-                      <th className="py-3 pr-4">Caller Agent</th>
-                      <th className="py-3 px-4">Target Agent</th>
-                      <th className="py-3 px-4">Assigned Task Context</th>
-                      <th className="py-3 px-4">Handoff Payout</th>
-                      <th className="py-3 px-4">Gas Used</th>
-                      <th className="py-3 px-4">Execution Cost</th>
-                      <th className="py-3 px-4">Consensus Status</th>
-                      <th className="py-3 pl-4 text-right">Elapsed Time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {telemetryLogs.map((log) => (
-                      <tr key={log.id} className="border-b border-neutral-50 last:border-0 hover:bg-neutral-50/50 transition-colors">
-                        <td className="py-3 pr-4 font-bold text-brand-text-dark">{log.caller}</td>
-                        <td className="py-3 px-4 font-bold text-brand-text-dark">{log.target}</td>
-                        <td className="py-3 px-4">{log.task}</td>
-                        <td className="py-3 px-4 font-bold text-brand-text-dark">{log.cost}</td>
-                        <td className="py-3 px-4 font-mono text-[11px] font-semibold text-brand-text-dark">{log.gasUsed.toLocaleString()}</td>
-                        <td className="py-3 px-4 font-mono text-[11px] text-brand-yellow font-extrabold">{log.executionCost} CROO</td>
-                        <td className="py-3 px-4">
-                          <span className="inline-flex items-center space-x-1.5 rounded-full bg-emerald-50 text-emerald-600 px-2 py-0.5 text-[10px] font-bold">
-                            <ShieldCheck size={12} />
-                            <span>Verified</span>
-                          </span>
-                        </td>
-                        <td className="py-3 pl-4 text-right">{log.time}</td>
+              {/* A2A Telemetry audit logs list */}
+              <div className="glass-card rounded-2xl p-6">
+                <h3 className="font-heading text-xs font-bold text-brand-text-dark uppercase tracking-wider mb-6">A2A Decentralized Call History</h3>
+                
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-brand-text-muted">
+                    <thead>
+                      <tr className="border-b border-neutral-100 pb-3 text-brand-text-dark font-bold">
+                        <th className="py-3 pr-4">Caller Agent</th>
+                        <th className="py-3 px-4">Target Agent</th>
+                        <th className="py-3 px-4">Assigned Task Context</th>
+                        <th className="py-3 px-4">Handoff Payout</th>
+                        <th className="py-3 px-4">Gas Used</th>
+                        <th className="py-3 px-4">Execution Cost</th>
+                        <th className="py-3 px-4">Consensus Status</th>
+                        <th className="py-3 pl-4 text-right">Elapsed Time</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {telemetryLogs.map((log) => (
+                        <tr key={log.id} className="border-b border-neutral-50 last:border-0 hover:bg-neutral-50/50 transition-colors">
+                          <td className="py-3 pr-4 font-bold text-brand-text-dark">{log.caller}</td>
+                          <td className="py-3 px-4 font-bold text-brand-text-dark">{log.target}</td>
+                          <td className="py-3 px-4">{log.task}</td>
+                          <td className="py-3 px-4 font-bold text-brand-text-dark">{log.cost}</td>
+                          <td className="py-3 px-4 font-mono text-[11px] font-semibold text-brand-text-dark">{log.gasUsed.toLocaleString('en-US')}</td>
+                          <td className="py-3 px-4 font-mono text-[11px] text-brand-yellow font-extrabold">{log.executionCost} CROO</td>
+                          <td className="py-3 px-4">
+                            <span className="inline-flex items-center space-x-1.5 rounded-full bg-emerald-50 text-emerald-600 px-2 py-0.5 text-[10px] font-bold">
+                              <ShieldCheck size={12} />
+                              <span>Verified</span>
+                            </span>
+                          </td>
+                          <td className="py-3 pl-4 text-right">{log.time}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
+
             </div>
 
           </div>
+        </main>
 
-        </div>
-      </main>
-
-      <Footer />
-    </div>
+        <Footer />
+      </div>
+    </WalletGate>
   );
 }

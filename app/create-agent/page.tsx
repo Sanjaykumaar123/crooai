@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import { useApp } from '@/lib/AppContext';
+import WalletGate from '@/components/WalletGate';
 import { Agent } from '@/types';
 import { 
   ChevronRight, 
@@ -16,13 +17,18 @@ import {
   ShieldCheck, 
   Settings, 
   Cpu, 
-  Tag 
+  Tag,
+  Globe,
+  Wallet
 } from 'lucide-react';
 
 export default function CreateAgentPage() {
   const router = useRouter();
-  const { createAgent, wallet } = useApp();
+  const { createAgent, wallet, connectWallet } = useApp();
   const [step, setStep] = useState(1);
+  const [deployState, setDeployState] = useState<'idle' | 'signature_request' | 'minting_nft' | 'registering_registry' | 'uploading_metadata' | 'success'>('idle');
+  const [mintedId, setMintedId] = useState<number>(0);
+  const [newAgentId, setNewAgentId] = useState<string>('');
 
   // Form Fields State
   const [formData, setFormData] = useState({
@@ -36,7 +42,7 @@ export default function CreateAgentPage() {
     capabilities: ['Web Research', 'Text Summarization'],
     howItWorks: ['Submit request', 'Analyze query and search', 'Structure detailed markdown report'],
     dependencies: [] as string[],
-    model: 'gpt-4o',
+    model: 'gemini-1.5-pro',
     systemPrompt: '',
     temperature: 0.7
   });
@@ -63,20 +69,22 @@ export default function CreateAgentPage() {
     }));
   };
 
-  const handlePublish = () => {
+  const handlePublish = async () => {
     if (!formData.name.trim() || !formData.description.trim()) {
       alert('Please fill out the agent name and short description first!');
       setStep(1);
       return;
     }
 
-    createAgent({
+    setDeployState('signature_request');
+
+    const result = await createAgent({
       name: formData.name,
       description: formData.description,
       longDescription: formData.longDescription,
       category: formData.category,
       icon: formData.icon,
-      creator: wallet.connected && wallet.address ? wallet.address.substring(0, 8) + '...' : 'DataMind',
+      creator: wallet.address || '0x0000...0000',
       price: formData.price,
       capabilities: formData.capabilities,
       howItWorks: formData.howItWorks,
@@ -84,8 +92,23 @@ export default function CreateAgentPage() {
       verified: true
     });
 
-    alert('Smart contract created! Agent successfully registered on the blockchain.');
-    router.push('/marketplace');
+    if (!result.success) {
+      alert(`Deployment failed: ${result.error}`);
+      setDeployState('idle');
+      return;
+    }
+
+    setDeployState('minting_nft');
+    await new Promise((r) => setTimeout(r, 800));
+    setDeployState('registering_registry');
+    await new Promise((r) => setTimeout(r, 800));
+    setDeployState('uploading_metadata');
+    await new Promise((r) => setTimeout(r, 800));
+
+    const targetId = formData.name.toLowerCase().replace(/\s+/g, '-');
+    setMintedId(result.agentId || 0);
+    setNewAgentId(targetId);
+    setDeployState('success');
   };
 
   const steps = [
@@ -96,381 +119,560 @@ export default function CreateAgentPage() {
     { num: 5, label: 'Review' }
   ];
 
-  return (
-    <div className="flex min-h-screen flex-col bg-[#FFFDF5]">
-      <Header />
+  const getStepClass = (stepName: 'signature' | 'nft' | 'registry' | 'metadata') => {
+    const states = ['signature_request', 'minting_nft', 'registering_registry', 'uploading_metadata', 'success'];
+    const currentIndex = states.indexOf(deployState);
+    const stepIndex = {
+      signature: 0,
+      nft: 1,
+      registry: 2,
+      metadata: 3
+    }[stepName];
 
-      <main className="flex-1 mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
-        
-        {/* Card Container */}
-        <div className="p-6 sm:p-8 glass-card rounded-2xl">
-          
-          {/* Progress Indicator */}
-          <div className="mb-10">
-            <div className="flex items-center justify-between">
-              {steps.map((s, idx) => (
-                <React.Fragment key={s.num}>
-                  {/* Step bubble */}
-                  <div className="flex flex-col items-center relative z-10">
-                    <div className={`flex h-10 w-10 items-center justify-center rounded-full border-2 text-xs font-bold transition-all duration-300 ${
-                      step === s.num
-                        ? 'border-brand-yellow bg-brand-light-gold text-brand-text-dark font-extrabold shadow-sm'
-                        : step > s.num
-                        ? 'border-emerald-500 bg-emerald-500 text-white'
-                        : 'border-neutral-200 bg-white text-brand-text-muted'
-                    }`}>
-                      {step > s.num ? <Check size={16} /> : s.num}
-                    </div>
-                    <span className={`mt-2 text-[10px] font-bold tracking-wider uppercase hidden sm:block ${
-                      step === s.num ? 'text-brand-text-dark font-extrabold' : 'text-brand-text-muted'
-                    }`}>
-                      {s.label}
-                    </span>
+    if (currentIndex === stepIndex) return 'text-brand-yellow font-bold';
+    if (currentIndex > stepIndex) return 'text-brand-text-dark';
+    return 'text-neutral-400';
+  };
+
+  const getStepIcon = (stepName: 'signature' | 'nft' | 'registry' | 'metadata') => {
+    const states = ['signature_request', 'minting_nft', 'registering_registry', 'uploading_metadata', 'success'];
+    const currentIndex = states.indexOf(deployState);
+    const stepIndex = {
+      signature: 0,
+      nft: 1,
+      registry: 2,
+      metadata: 3
+    }[stepName];
+
+    if (currentIndex === stepIndex) return <span className="animate-spin text-brand-yellow">⏳</span>;
+    if (currentIndex > stepIndex) return <span className="text-emerald-500 font-bold">✓</span>;
+    return null;
+  };
+
+
+  if (deployState !== 'idle') {
+    return (
+      <WalletGate 
+        title="Connect Wallet to Deploy Agent" 
+        description="Connect your Web3 MetaMask wallet to deploy your custom AI agent as an ERC721 NFT and register pricing in the Agent Registry."
+      >
+        <div className="flex min-h-screen flex-col bg-[#FFFDF5]">
+          <Header />
+          <main className="flex-1 mx-auto w-full max-w-md px-4 py-16 flex items-center justify-center">
+            <div className="w-full glass-card border border-gold-soft rounded-3xl p-8 shadow-2xl space-y-8 animate-in fade-in duration-300 text-center">
+              
+              {/* Deploying state screens */}
+              {deployState !== 'success' && (
+                <div className="space-y-6">
+                  <div className="relative h-20 w-20 mx-auto flex items-center justify-center rounded-2xl bg-brand-light-gold/20 text-brand-yellow border border-gold-soft">
+                    <div className="absolute inset-0 rounded-2xl border-4 border-brand-yellow border-t-transparent animate-spin" />
+                    <Cpu className="h-8 w-8 animate-pulse text-brand-yellow" />
                   </div>
 
-                  {/* Connecting Line */}
-                  {idx < steps.length - 1 && (
-                    <div className="flex-1 h-0.5 mx-2 bg-neutral-100 relative -top-3 sm:-top-5">
-                      <div 
-                        className="h-full bg-brand-yellow transition-all duration-300"
-                        style={{ width: step > s.num ? '100%' : '0%' }}
-                      />
-                    </div>
-                  )}
-                </React.Fragment>
-              ))}
-            </div>
-          </div>
-
-          {/* Form Wizard Content */}
-          <div className="min-h-[350px]">
-            
-            {/* STEP 1: Basic Information */}
-            {step === 1 && (
-              <div className="space-y-6 animate-in fade-in duration-300">
-                <div>
-                  <h2 className="font-heading text-xl font-extrabold text-brand-text-dark">Basic Agent Info</h2>
-                  <p className="text-xs text-brand-text-muted mt-1">Provide the foundational descriptors for your autonomous agent.</p>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-brand-text-dark uppercase tracking-wider mb-2">Agent Name</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Research Agent"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full rounded-xl border border-neutral-200 py-3 px-4 text-xs focus:border-brand-yellow focus:outline-none"
-                    />
+                  <div className="space-y-2">
+                    <h2 className="font-heading text-lg font-extrabold text-brand-text-dark">Deploying Smart Contracts</h2>
+                    <p className="text-xs text-brand-text-muted leading-relaxed">
+                      Executing on-chain transaction lifecycle. Please confirm any prompt in your connected wallet.
+                    </p>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-brand-text-dark uppercase tracking-wider mb-2">Short Description</label>
-                    <input
-                      type="text"
-                      placeholder="Summarize the core task of the agent in one sentence."
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      className="w-full rounded-xl border border-neutral-200 py-3 px-4 text-xs focus:border-brand-yellow focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-brand-text-dark uppercase tracking-wider mb-2">Long Detail Description</label>
-                    <textarea
-                      rows={4}
-                      placeholder="Provide full description of operations, inputs expected and outputs returned."
-                      value={formData.longDescription}
-                      onChange={(e) => setFormData({ ...formData, longDescription: e.target.value })}
-                      className="w-full rounded-xl border border-neutral-200 py-3 px-4 text-xs focus:border-brand-yellow focus:outline-none resize-none"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-brand-text-dark uppercase tracking-wider mb-2">Category</label>
-                      <select
-                        value={formData.category}
-                        onChange={(e) => setFormData({ ...formData, category: e.target.value as any })}
-                        className="w-full rounded-xl border border-neutral-200 py-3 px-3 text-xs bg-white focus:border-brand-yellow focus:outline-none"
-                      >
-                        <option value="Research">Research</option>
-                        <option value="Data">Data</option>
-                        <option value="Analytics">Analytics</option>
-                        <option value="Content">Content</option>
-                        <option value="Development">Development</option>
-                        <option value="Utility">Utility</option>
-                      </select>
+                  {/* Step List Progress */}
+                  <div className="text-left space-y-4 border border-neutral-100 rounded-xl p-4 bg-neutral-50/50">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-brand-text-dark">Contract Deploy Sequence</span>
+                      <span className="text-[10px] font-mono text-brand-yellow font-extrabold animate-pulse">Processing...</span>
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-bold text-brand-text-dark uppercase tracking-wider mb-2">Icon Theme</label>
-                      <select
-                        value={formData.icon}
-                        onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
-                        className="w-full rounded-xl border border-neutral-200 py-3 px-3 text-xs bg-white focus:border-brand-yellow focus:outline-none"
-                      >
-                        <option value="Search">Search Glass</option>
-                        <option value="Globe">Globe / Web</option>
-                        <option value="BarChart">Bar Chart</option>
-                        <option value="ShieldCheck">Shield / Security</option>
-                        <option value="FileText">File Text</option>
-                        <option value="Code">Coding Tags</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* STEP 2: Capabilities */}
-            {step === 2 && (
-              <div className="space-y-6 animate-in fade-in duration-300">
-                <div>
-                  <h2 className="font-heading text-xl font-extrabold text-brand-text-dark">Agent Capabilities</h2>
-                  <p className="text-xs text-brand-text-muted mt-1">Specify skills and execution steps that the agent executes.</p>
-                </div>
-
-                <div className="space-y-5">
-                  {/* Capabilities List */}
-                  <div>
-                    <label className="block text-xs font-bold text-brand-text-dark uppercase tracking-wider mb-3">Capabilities / Skills</label>
-                    <div className="space-y-2 mb-3">
-                      {formData.capabilities.map((cap, idx) => (
-                        <div key={idx} className="flex items-center justify-between rounded-xl bg-neutral-50 px-4 py-2 text-xs border border-neutral-100">
-                          <span className="font-semibold text-brand-text-dark">{cap}</span>
-                          <button onClick={() => handleRemoveField('capabilities', idx)} className="text-red-500 hover:text-red-700">
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Add new capability (e.g. Code Review)"
-                        value={newCap}
-                        onChange={(e) => setNewCap(e.target.value)}
-                        className="flex-1 rounded-xl border border-neutral-200 py-2.5 px-4 text-xs focus:border-brand-yellow focus:outline-none"
-                      />
-                      <button
-                        onClick={() => handleAddField('capabilities', newCap, setNewCap)}
-                        className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-yellow text-white hover:bg-[#F59E0B] shadow-sm"
-                      >
-                        <Plus size={16} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Workflow steps */}
-                  <div>
-                    <label className="block text-xs font-bold text-brand-text-dark uppercase tracking-wider mb-3">Workflow Execution Steps</label>
-                    <div className="space-y-2 mb-3">
-                      {formData.howItWorks.map((st, idx) => (
-                        <div key={idx} className="flex items-center justify-between rounded-xl bg-neutral-50 px-4 py-2 text-xs border border-neutral-100">
-                          <span className="font-semibold text-brand-text-dark">Step {idx + 1}: {st}</span>
-                          <button onClick={() => handleRemoveField('howItWorks', idx)} className="text-red-500 hover:text-red-700">
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Add execution step (e.g. Audit compiler warnings)"
-                        value={newStep}
-                        onChange={(e) => setNewStep(e.target.value)}
-                        className="flex-1 rounded-xl border border-neutral-200 py-2.5 px-4 text-xs focus:border-brand-yellow focus:outline-none"
-                      />
-                      <button
-                        onClick={() => handleAddField('howItWorks', newStep, setNewStep)}
-                        className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-yellow text-white hover:bg-[#F59E0B] shadow-sm"
-                      >
-                        <Plus size={16} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* STEP 3: Pricing */}
-            {step === 3 && (
-              <div className="space-y-6 animate-in fade-in duration-300">
-                <div>
-                  <h2 className="font-heading text-xl font-extrabold text-brand-text-dark">On-Chain Pricing Model</h2>
-                  <p className="text-xs text-brand-text-muted mt-1">Specify how much you charge users in CROO token per request execution.</p>
-                </div>
-
-                <div className="space-y-5">
-                  <div>
-                    <label className="block text-xs font-bold text-brand-text-dark uppercase tracking-wider mb-2">Price Per Task (CROO)</label>
-                    <input
-                      type="number"
-                      step="0.001"
-                      min="0.001"
-                      max="1.0"
-                      value={formData.price}
-                      onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) })}
-                      className="w-full rounded-xl border border-neutral-200 py-3 px-4 text-xs focus:border-brand-yellow focus:outline-none"
-                    />
-                  </div>
-
-                  <div className="rounded-xl border border-gold-soft bg-gold-light-gold/15 p-4 flex items-start space-x-3 text-xs">
-                    <Info size={16} className="text-brand-yellow shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-bold text-brand-text-dark block">Decentralized Escrow Auditing</span>
-                      <p className="text-brand-text-muted mt-1 leading-relaxed">
-                        Funds from client wallets are locked in a smart contract. Once your agent finishes execution, decentralized oracles check verification logs to release funds to your registered address.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* STEP 4: AI Configuration */}
-            {step === 4 && (
-              <div className="space-y-6 animate-in fade-in duration-300">
-                <div>
-                  <h2 className="font-heading text-xl font-extrabold text-brand-text-dark">Agent Engine Configuration</h2>
-                  <p className="text-xs text-brand-text-muted mt-1">Hook up your LLM node, set base system instructions, and control generation temperature.</p>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-brand-text-dark uppercase tracking-wider mb-2">Base LLM Model</label>
-                    <select
-                      value={formData.model}
-                      onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                      className="w-full rounded-xl border border-neutral-200 py-3 px-3 text-xs bg-white focus:border-brand-yellow focus:outline-none"
-                    >
-                      <option value="gpt-4o">GPT-4o (OpenAI)</option>
-                      <option value="claude-3-5-sonnet">Claude 3.5 Sonnet (Anthropic)</option>
-                      <option value="llama-3">Llama 3 70B (Meta)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-brand-text-dark uppercase tracking-wider mb-2">System Instructions / Prompt</label>
-                    <textarea
-                      rows={5}
-                      placeholder="You are an autonomous AI research node. Your task is to..."
-                      value={formData.systemPrompt}
-                      onChange={(e) => setFormData({ ...formData, systemPrompt: e.target.value })}
-                      className="w-full rounded-xl border border-neutral-200 py-3 px-4 text-xs focus:border-brand-yellow focus:outline-none resize-none"
-                    />
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-xs font-bold text-brand-text-dark uppercase tracking-wider">Temperature</label>
-                      <span className="text-xs font-bold text-brand-text-dark">{formData.temperature}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0.0"
-                      max="1.2"
-                      step="0.1"
-                      value={formData.temperature}
-                      onChange={(e) => setFormData({ ...formData, temperature: parseFloat(e.target.value) })}
-                      className="w-full h-1.5 bg-neutral-200 rounded-lg appearance-none cursor-pointer accent-brand-yellow"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* STEP 5: Review */}
-            {step === 5 && (
-              <div className="space-y-6 animate-in fade-in duration-300">
-                <div>
-                  <h2 className="font-heading text-xl font-extrabold text-brand-text-dark">Review & Publish</h2>
-                  <p className="text-xs text-brand-text-muted mt-1">Ensure all smart contract details and capabilities are correct before deploying.</p>
-                </div>
-
-                <div className="space-y-4 border border-gold-soft rounded-xl p-5 bg-neutral-50/50 text-xs">
-                  <div className="grid grid-cols-2 gap-4 pb-4 border-b border-neutral-100">
-                    <div>
-                      <span className="text-brand-text-muted block">Agent Name</span>
-                      <span className="font-bold text-brand-text-dark">{formData.name || 'Not Provided'}</span>
-                    </div>
-                    <div>
-                      <span className="text-brand-text-muted block">Category</span>
-                      <span className="font-bold text-brand-text-dark">{formData.category}</span>
-                    </div>
-                  </div>
-
-                  <div className="pb-4 border-b border-neutral-100">
-                    <span className="text-brand-text-muted block">Short Description</span>
-                    <p className="font-semibold text-brand-text-dark mt-1">{formData.description || 'Not Provided'}</p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 pb-4 border-b border-neutral-100">
-                    <div>
-                      <span className="text-brand-text-muted block">Pricing per Request</span>
-                      <span className="font-bold text-brand-yellow">{formData.price} CROO</span>
-                    </div>
-                    <div>
-                      <span className="text-brand-text-muted block">LLM Backend Engine</span>
-                      <span className="font-bold text-brand-text-dark uppercase">{formData.model}</span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <span className="text-brand-text-muted block mb-1">Capabilities Selected</span>
-                    <div className="flex flex-wrap gap-1">
-                      {formData.capabilities.map((cap, i) => (
-                        <span key={i} className="inline-block bg-brand-light-gold text-brand-text-dark font-semibold px-2 py-0.5 rounded text-[10px]">
-                          {cap}
+                    <div className="space-y-3 font-semibold text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className={getStepClass('signature')}>
+                          1. Requesting Wallet Signature
                         </span>
-                      ))}
+                        {getStepIcon('signature')}
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className={getStepClass('nft')}>
+                          2. Minting Agent NFT (AgentNFT.sol)
+                        </span>
+                        {getStepIcon('nft')}
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className={getStepClass('registry')}>
+                          3. Registering in AgentRegistry.sol
+                        </span>
+                        {getStepIcon('registry')}
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className={getStepClass('metadata')}>
+                          4. Uploading Metadata to IPFS Node
+                        </span>
+                        {getStepIcon('metadata')}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-          </div>
+              {/* Success screen */}
+              {deployState === 'success' && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  <div className="h-16 w-16 mx-auto flex items-center justify-center rounded-full bg-emerald-50 text-emerald-600 border-2 border-emerald-100">
+                    <Check className="h-8 w-8" />
+                  </div>
 
-          {/* Wizard Footer Controls */}
-          <div className="mt-8 flex items-center justify-between border-t border-neutral-100 pt-6">
-            <button
-              onClick={prevStep}
-              disabled={step === 1}
-              className={`flex items-center space-x-1.5 rounded-xl border border-neutral-200 bg-white px-5 py-2.5 text-xs font-bold text-brand-text-dark shadow-sm transition-all hover:bg-neutral-50 ${
-                step === 1 ? 'opacity-40 cursor-not-allowed' : ''
-              }`}
-            >
-              <ChevronLeft size={16} />
-              <span>Back</span>
-            </button>
+                  <div className="space-y-1">
+                    <h2 className="font-heading text-xl font-extrabold text-brand-text-dark">🎉 Agent Created Successfully!</h2>
+                    <p className="text-xs text-brand-text-muted">
+                      Your agent smart contract is deployed and active on Base Sepolia.
+                    </p>
+                  </div>
 
-            {step < 5 ? (
-              <button
-                onClick={nextStep}
-                className="flex items-center space-x-1.5 rounded-xl bg-brand-yellow px-5 py-2.5 text-xs font-bold text-white shadow-premium-soft hover:bg-[#F59E0B] transition-all"
-              >
-                <span>Next</span>
-                <ChevronRight size={16} />
-              </button>
-            ) : (
-              <button
-                onClick={handlePublish}
-                className="flex items-center space-x-1.5 rounded-xl bg-emerald-500 px-6 py-2.5 text-xs font-bold text-white shadow-md hover:bg-emerald-600 transition-all"
-              >
-                <Check size={16} />
-                <span>Deploy Agent Smart Contract</span>
-              </button>
-            )}
-          </div>
+                  {/* NFT Receipt details */}
+                  <div className="border-2 border-gold-soft bg-[#FFFDF5] rounded-2xl p-5 relative overflow-hidden text-left shadow-sm">
+                    {/* Watermark badge */}
+                    <div className="absolute -right-4 -bottom-4 h-16 w-16 opacity-10 bg-brand-yellow rounded-full flex items-center justify-center text-4xl font-extrabold font-mono">
+                      NFT
+                    </div>
 
+                    <div className="flex items-center space-x-3 pb-3 border-b border-neutral-100">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-light-gold text-brand-yellow border border-gold-soft">
+                        <Cpu size={20} />
+                      </div>
+                      <div>
+                        <span className="text-xs font-extrabold text-brand-text-dark block">{formData.name}</span>
+                        <span className="text-[9px] text-brand-text-muted uppercase tracking-wider font-bold">{formData.category}</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 pt-3 text-[10px] font-semibold text-brand-text-muted">
+                      <div>
+                        <span>Agent ID</span>
+                        <span className="block font-bold text-brand-text-dark font-mono text-xs">#{mintedId}</span>
+                      </div>
+                      <div>
+                        <span>Pricing Rate</span>
+                        <span className="block font-bold text-brand-yellow font-mono text-xs">{formData.price} CROO</span>
+                      </div>
+                      <div className="col-span-2 border-t border-neutral-100 pt-3">
+                        <span>Owner Wallet</span>
+                        <span className="block font-mono font-bold text-brand-text-dark text-[9px] select-all leading-relaxed break-all">
+                          {wallet.address || '0xAf82A4C2E9D84321A1B2C3D4E5F6A7B8C9D0E1F2'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Navigation Buttons */}
+                  <div className="space-y-3 pt-2">
+                    <button
+                      onClick={() => router.push(`/agent/${newAgentId}`)}
+                      className="flex w-full items-center justify-center space-x-2 rounded-xl py-3.5 text-xs font-bold transition-all duration-300 bg-brand-yellow hover:bg-[#F59E0B] text-white shadow-premium-soft active:scale-95 animate-pulse"
+                    >
+                      <span>View Agent Page</span>
+                    </button>
+                    <button
+                      onClick={() => router.push('/marketplace')}
+                      className="w-full flex items-center justify-center rounded-xl border border-gold-soft bg-white py-3 text-xs font-bold text-brand-text-dark hover:bg-neutral-50 shadow-sm transition-colors"
+                    >
+                      Go to Marketplace
+                    </button>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </main>
+          <Footer />
         </div>
-      </main>
+      </WalletGate>
+    );
+  }
 
-      <Footer />
-    </div>
+  return (
+    <WalletGate 
+      title="Connect Wallet to Deploy Agent" 
+      description="Connect your Web3 MetaMask wallet to deploy your custom AI agent as an ERC721 NFT and register pricing in the Agent Registry."
+    >
+      <div className="flex min-h-screen flex-col bg-[#FFFDF5]">
+        <Header />
+
+        <main className="flex-1 mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
+          
+          {/* Card Container */}
+          <div className="p-6 sm:p-8 glass-card rounded-2xl">
+            
+            {/* Progress Indicator */}
+            <div className="mb-10">
+              <div className="flex items-center justify-between">
+                {steps.map((s, idx) => (
+                  <React.Fragment key={s.num}>
+                    {/* Step bubble */}
+                    <div className="flex flex-col items-center relative z-10">
+                      <div className={`flex h-10 w-10 items-center justify-center rounded-full border-2 text-xs font-bold transition-all duration-300 ${
+                        step === s.num
+                          ? 'border-brand-yellow bg-brand-light-gold text-brand-text-dark font-extrabold shadow-sm'
+                          : step > s.num
+                          ? 'border-emerald-500 bg-emerald-500 text-white'
+                          : 'border-neutral-200 bg-white text-brand-text-muted'
+                      }`}>
+                        {step > s.num ? <Check size={16} /> : s.num}
+                      </div>
+                      <span className={`mt-2 text-[10px] font-bold tracking-wider uppercase hidden sm:block ${
+                        step === s.num ? 'text-brand-text-dark font-extrabold' : 'text-brand-text-muted'
+                      }`}>
+                        {s.label}
+                      </span>
+                    </div>
+
+                    {/* Connecting Line */}
+                    {idx < steps.length - 1 && (
+                      <div className="flex-1 h-0.5 mx-2 bg-neutral-100 relative -top-3 sm:-top-5">
+                        <div 
+                          className="h-full bg-brand-yellow transition-all duration-300"
+                          style={{ width: step > s.num ? '100%' : '0%' }}
+                        />
+                      </div>
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+
+            {/* Form Wizard Content */}
+            <div className="min-h-[350px]">
+              
+              {/* STEP 1: Basic Information */}
+              {step === 1 && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  <div>
+                    <h2 className="font-heading text-xl font-extrabold text-brand-text-dark">Basic Agent Info</h2>
+                    <p className="text-xs text-brand-text-muted mt-1">Provide the foundational descriptors for your autonomous agent.</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-brand-text-dark uppercase tracking-wider mb-2">Agent Name</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Research Agent"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        className="w-full rounded-xl border border-neutral-200 py-3 px-4 text-xs focus:border-brand-yellow focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-brand-text-dark uppercase tracking-wider mb-2">Short Description</label>
+                      <input
+                        type="text"
+                        placeholder="Summarize the core task of the agent in one sentence."
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        className="w-full rounded-xl border border-neutral-200 py-3 px-4 text-xs focus:border-brand-yellow focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-brand-text-dark uppercase tracking-wider mb-2">Long Detail Description</label>
+                      <textarea
+                        rows={4}
+                        placeholder="Provide full description of operations, inputs expected and outputs returned."
+                        value={formData.longDescription}
+                        onChange={(e) => setFormData({ ...formData, longDescription: e.target.value })}
+                        className="w-full rounded-xl border border-neutral-200 py-3 px-4 text-xs focus:border-brand-yellow focus:outline-none resize-none"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-brand-text-dark uppercase tracking-wider mb-2">Category</label>
+                        <select
+                          value={formData.category}
+                          onChange={(e) => setFormData({ ...formData, category: e.target.value as any })}
+                          className="w-full rounded-xl border border-neutral-200 py-3 px-3 text-xs bg-white focus:border-brand-yellow focus:outline-none"
+                        >
+                          <option value="Research">Research</option>
+                          <option value="Data">Data</option>
+                          <option value="Analytics">Analytics</option>
+                          <option value="Content">Content</option>
+                          <option value="Development">Development</option>
+                          <option value="Utility">Utility</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-brand-text-dark uppercase tracking-wider mb-2">Icon Theme</label>
+                        <select
+                          value={formData.icon}
+                          onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
+                          className="w-full rounded-xl border border-neutral-200 py-3 px-3 text-xs bg-white focus:border-brand-yellow focus:outline-none"
+                        >
+                          <option value="Search">Search Glass</option>
+                          <option value="Globe">Globe / Web</option>
+                          <option value="BarChart">Bar Chart</option>
+                          <option value="ShieldCheck">Shield / Security</option>
+                          <option value="FileText">File Text</option>
+                          <option value="Code">Coding Tags</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 2: Capabilities */}
+              {step === 2 && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  <div>
+                    <h2 className="font-heading text-xl font-extrabold text-brand-text-dark">Agent Capabilities</h2>
+                    <p className="text-xs text-brand-text-muted mt-1">Specify skills and execution steps that the agent executes.</p>
+                  </div>
+
+                  <div className="space-y-5">
+                    {/* Capabilities List */}
+                    <div>
+                      <label className="block text-xs font-bold text-brand-text-dark uppercase tracking-wider mb-3">Capabilities / Skills</label>
+                      <div className="space-y-2 mb-3">
+                        {formData.capabilities.map((cap, idx) => (
+                          <div key={idx} className="flex items-center justify-between rounded-xl bg-neutral-50 px-4 py-2 text-xs border border-neutral-100">
+                            <span className="font-semibold text-brand-text-dark">{cap}</span>
+                            <button onClick={() => handleRemoveField('capabilities', idx)} className="text-red-500 hover:text-red-700">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Add new capability (e.g. Code Review)"
+                          value={newCap}
+                          onChange={(e) => setNewCap(e.target.value)}
+                          className="flex-1 rounded-xl border border-neutral-200 py-2.5 px-4 text-xs focus:border-brand-yellow focus:outline-none"
+                        />
+                        <button
+                          onClick={() => handleAddField('capabilities', newCap, setNewCap)}
+                          className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-yellow text-white hover:bg-[#F59E0B] shadow-sm"
+                        >
+                          <Plus size={16} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Workflow steps */}
+                    <div>
+                      <label className="block text-xs font-bold text-brand-text-dark uppercase tracking-wider mb-3">Workflow Execution Steps</label>
+                      <div className="space-y-2 mb-3">
+                        {formData.howItWorks.map((st, idx) => (
+                          <div key={idx} className="flex items-center justify-between rounded-xl bg-neutral-50 px-4 py-2 text-xs border border-neutral-100">
+                            <span className="font-semibold text-brand-text-dark">Step {idx + 1}: {st}</span>
+                            <button onClick={() => handleRemoveField('howItWorks', idx)} className="text-red-500 hover:text-red-700">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Add execution step (e.g. Audit compiler warnings)"
+                          value={newStep}
+                          onChange={(e) => setNewStep(e.target.value)}
+                          className="flex-1 rounded-xl border border-neutral-200 py-2.5 px-4 text-xs focus:border-brand-yellow focus:outline-none"
+                        />
+                        <button
+                          onClick={() => handleAddField('howItWorks', newStep, setNewStep)}
+                          className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-yellow text-white hover:bg-[#F59E0B] shadow-sm"
+                        >
+                          <Plus size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 3: Pricing */}
+              {step === 3 && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  <div>
+                    <h2 className="font-heading text-xl font-extrabold text-brand-text-dark">On-Chain Pricing Model</h2>
+                    <p className="text-xs text-brand-text-muted mt-1">Specify how much you charge users in CROO token per request execution.</p>
+                  </div>
+
+                  <div className="space-y-5">
+                    <div>
+                      <label className="block text-xs font-bold text-brand-text-dark uppercase tracking-wider mb-2">Price Per Task (CROO)</label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        min="0.001"
+                        max="1.0"
+                        value={formData.price}
+                        onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) })}
+                        className="w-full rounded-xl border border-neutral-200 py-3 px-4 text-xs focus:border-brand-yellow focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="rounded-xl border border-gold-soft bg-gold-light-gold/15 p-4 flex items-start space-x-3 text-xs">
+                      <Info size={16} className="text-brand-yellow shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold text-brand-text-dark block">Decentralized Escrow Auditing</span>
+                        <p className="text-brand-text-muted mt-1 leading-relaxed">
+                          Funds from client wallets are locked in a smart contract. Once your agent finishes execution, decentralized oracles check verification logs to release funds to your registered address.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 4: AI Configuration */}
+              {step === 4 && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  <div>
+                    <h2 className="font-heading text-xl font-extrabold text-brand-text-dark">Agent Engine Configuration</h2>
+                    <p className="text-xs text-brand-text-muted mt-1">Hook up your LLM node, set base system instructions, and control generation temperature.</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-brand-text-dark uppercase tracking-wider mb-2">Base LLM Model</label>
+                      <select
+                        value={formData.model}
+                        onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                        className="w-full rounded-xl border border-neutral-200 py-3 px-3 text-xs bg-white focus:border-brand-yellow focus:outline-none"
+                      >
+                        <option value="gemini-1.5-pro">Gemini 1.5 Pro (Google)</option>
+                        <option value="gemini-1.5-flash">Gemini 1.5 Flash (Google)</option>
+                        <option value="gpt-4o">GPT-4o (OpenAI)</option>
+                        <option value="claude-3-5-sonnet">Claude 3.5 Sonnet (Anthropic)</option>
+                        <option value="llama-3">Llama 3 70B (Meta)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-brand-text-dark uppercase tracking-wider mb-2">System Instructions / Prompt</label>
+                      <textarea
+                        rows={5}
+                        placeholder="You are an autonomous AI research node. Your task is to..."
+                        value={formData.systemPrompt}
+                        onChange={(e) => setFormData({ ...formData, systemPrompt: e.target.value })}
+                        className="w-full rounded-xl border border-neutral-200 py-3 px-4 text-xs focus:border-brand-yellow focus:outline-none resize-none"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-xs font-bold text-brand-text-dark uppercase tracking-wider">Temperature</label>
+                        <span className="text-xs font-bold text-brand-text-dark">{formData.temperature}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.0"
+                        max="1.2"
+                        step="0.1"
+                        value={formData.temperature}
+                        onChange={(e) => setFormData({ ...formData, temperature: parseFloat(e.target.value) })}
+                        className="w-full h-1.5 bg-neutral-200 rounded-lg appearance-none cursor-pointer accent-brand-yellow"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 5: Review */}
+              {step === 5 && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  <div>
+                    <h2 className="font-heading text-xl font-extrabold text-brand-text-dark">Review & Publish</h2>
+                    <p className="text-xs text-brand-text-muted mt-1">Ensure all smart contract details and capabilities are correct before deploying.</p>
+                  </div>
+
+                  <div className="space-y-4 border border-gold-soft rounded-xl p-5 bg-neutral-50/50 text-xs">
+                    <div className="grid grid-cols-2 gap-4 pb-4 border-b border-neutral-100">
+                      <div>
+                        <span className="text-brand-text-muted block">Agent Name</span>
+                        <span className="font-bold text-brand-text-dark">{formData.name || 'Not Provided'}</span>
+                      </div>
+                      <div>
+                        <span className="text-brand-text-muted block">Category</span>
+                        <span className="font-bold text-brand-text-dark">{formData.category}</span>
+                      </div>
+                    </div>
+
+                    <div className="pb-4 border-b border-neutral-100">
+                      <span className="text-brand-text-muted block">Short Description</span>
+                      <p className="font-semibold text-brand-text-dark mt-1">{formData.description || 'Not Provided'}</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 pb-4 border-b border-neutral-100">
+                      <div>
+                        <span className="text-brand-text-muted block">Pricing per Request</span>
+                        <span className="font-bold text-brand-yellow">{formData.price} CROO</span>
+                      </div>
+                      <div>
+                        <span className="text-brand-text-muted block">LLM Backend Engine</span>
+                        <span className="font-bold text-brand-text-dark uppercase">{formData.model}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-brand-text-muted block mb-1">Capabilities Selected</span>
+                      <div className="flex flex-wrap gap-1">
+                        {formData.capabilities.map((cap, i) => (
+                          <span key={i} className="inline-block bg-brand-light-gold text-brand-text-dark font-semibold px-2 py-0.5 rounded text-[10px]">
+                            {cap}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            {/* Wizard Footer Controls */}
+            <div className="mt-8 flex items-center justify-between border-t border-neutral-100 pt-6">
+              <button
+                onClick={prevStep}
+                disabled={step === 1}
+                className={`flex items-center space-x-1.5 rounded-xl border border-neutral-200 bg-white px-5 py-2.5 text-xs font-bold text-brand-text-dark shadow-sm transition-all hover:bg-neutral-50 ${
+                  step === 1 ? 'opacity-40 cursor-not-allowed' : ''
+                }`}
+              >
+                <ChevronLeft size={16} />
+                <span>Back</span>
+              </button>
+
+              {step < 5 ? (
+                <button
+                  onClick={nextStep}
+                  className="flex items-center space-x-1.5 rounded-xl bg-brand-yellow px-5 py-2.5 text-xs font-bold text-white shadow-premium-soft hover:bg-[#F59E0B] transition-all"
+                >
+                  <span>Next</span>
+                  <ChevronRight size={16} />
+                </button>
+              ) : (
+                <button
+                  onClick={handlePublish}
+                  className="flex items-center space-x-1.5 rounded-xl bg-emerald-500 px-6 py-2.5 text-xs font-bold text-white shadow-md hover:bg-emerald-600 transition-all"
+                >
+                  <Check size={16} />
+                  <span>Deploy Agent Smart Contract</span>
+                </button>
+              )}
+            </div>
+
+          </div>
+        </main>
+
+        <Footer />
+      </div>
+    </WalletGate>
   );
 }

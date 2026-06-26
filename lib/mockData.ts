@@ -23,6 +23,12 @@ export const INITIAL_AGENTS: Agent[] = [
       'Fact Checking',
       'Structured Markdown Output'
     ],
+    useCases: [
+      'Market Research',
+      'Startup Validation',
+      'Competitive Analysis',
+      'Trend Discovery'
+    ],
     howItWorks: [
       'Input a research prompt or question.',
       'Agent query plans and searches multiple databases & search engines.',
@@ -64,6 +70,12 @@ export const INITIAL_AGENTS: Agent[] = [
       'Breaking News Alerts',
       'Custom RSS Scraping'
     ],
+    useCases: [
+      'Collect News',
+      'Sentiment Analysis',
+      'Recent Events Tracking',
+      'Crypto & Tech Alerts'
+    ],
     howItWorks: [
       'Define search keywords or select predefined topics (e.g. DeFi, AI).',
       'Agent listens to real-time APIs, news outlets, and social channels.',
@@ -102,6 +114,12 @@ export const INITIAL_AGENTS: Agent[] = [
       'Trend Forecasting',
       'Chart Config Generation',
       'CSV / JSON Processing'
+    ],
+    useCases: [
+      'Calculate KPIs',
+      'Generate Metrics',
+      'Trend Analysis',
+      'CSV/JSON Data Visualizations'
     ],
     howItWorks: [
       'Upload a CSV/JSON file or specify an on-chain data endpoint.',
@@ -142,6 +160,12 @@ export const INITIAL_AGENTS: Agent[] = [
       'Multi-source Consensus Check',
       'Cryptographic Proof Generation'
     ],
+    useCases: [
+      'Fact Checking',
+      'Security Validation',
+      'Output Verification',
+      'Smart Contract Audits'
+    ],
     howItWorks: [
       'Input contract address, source code, or transaction hash.',
       'Agent compiles code and runs security checkers (Slither, Mythril rules).',
@@ -181,6 +205,12 @@ export const INITIAL_AGENTS: Agent[] = [
       'Multi-lingual Translation',
       'HTML / Markdown / PDF Exports'
     ],
+    useCases: [
+      'Create Final Report',
+      'Combine Agent Outputs',
+      'PDF & Markdown Generation',
+      'Executive Brief Styling'
+    ],
     howItWorks: [
       'Provide draft content, raw notes, or summaries.',
       'Select a design template (Modern, Formal, Web3 Startup).',
@@ -219,6 +249,13 @@ export const INITIAL_AGENTS: Agent[] = [
       'Automated Jest/PyTest Writing',
       'Refactoring Advice (Clean Code principles)',
       'Git Hooks & PR Integrations'
+    ],
+    useCases: [
+      'Review Solidity Contracts',
+      'Detect Security Vulnerabilities',
+      'Optimize Gas Usage',
+      'Review Pull Requests',
+      'Generate Audit Reports'
     ],
     howItWorks: [
       'Provide a PR URL or paste a git diff.',

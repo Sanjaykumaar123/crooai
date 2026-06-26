@@ -31,7 +31,8 @@ def run_agent_workflow(payload: ExecuteRequest):
         
         return {
             "report": result_state.get("report_output", ""),
-            "execution_id": result_state.get("executions", [])[-1]["id"] if result_state.get("executions") else "unknown"
+            "execution_id": result_state.get("executions", [])[-1]["id"] if result_state.get("executions") else "unknown",
+            "executions": result_state.get("executions", [])
         }
     except Exception as e:
         import traceback

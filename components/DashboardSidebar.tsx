@@ -6,6 +6,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import { 
   LayoutDashboard, 
   User, 
+  UserCheck,
+  Terminal,
   History, 
   Lock, 
   BarChart3, 
@@ -29,6 +31,8 @@ export default function DashboardSidebar({ activeTab = 'dashboard', onTabChange 
   const menuItems = [
     { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
     { id: 'my-agents', name: 'My Agents', icon: User, href: '/dashboard?tab=my-agents' },
+    { id: 'hired-agents', name: 'My Hired Agents', icon: UserCheck, href: '/dashboard?tab=hired-agents' },
+    { id: 'executions', name: 'Executions', icon: Terminal, href: '/dashboard?tab=executions' },
     { id: 'transactions', name: 'Transactions', icon: History, href: '/dashboard?tab=transactions' },
     { id: 'escrow', name: 'Escrows', icon: Lock, href: '/escrow' },
     { id: 'network', name: 'A2A Network', icon: Network, href: '/network' },
@@ -71,10 +75,10 @@ export default function DashboardSidebar({ activeTab = 'dashboard', onTabChange 
           <div className="mt-3 space-y-2">
             <div className="flex items-center justify-between rounded-xl bg-brand-light-gold/20 border border-gold-soft/55 p-3">
               <span className="text-xs font-bold text-brand-text-dark truncate max-w-[140px]">
-                {wallet.address}
+                {wallet.address && wallet.address.length > 13 ? `${wallet.address.substring(0, 6)}...${wallet.address.substring(wallet.address.length - 4)}` : wallet.address}
               </span>
               <span className="text-xs font-extrabold text-brand-yellow">
-                {wallet.balance.toFixed(2)} CROO
+                {(wallet.balance ?? 0).toFixed(2)} CROO
               </span>
             </div>
             <button

@@ -33,11 +33,14 @@ export interface Agent {
   icon: string; // Lucide icon identifier (e.g. 'Search', 'Shield', 'BarChart')
   verified: boolean;
   capabilities: string[];
+  useCases?: string[];
   howItWorks: string[];
   reviews: Review[];
   history: ExecutionHistory[];
   dependencies: string[]; // IDs of other agents
   createdDate: string;
+  walletAddress?: string;
+  earnings?: number;
 }
 
 export interface Transaction {
@@ -64,6 +67,7 @@ export interface Escrow {
   createdAt: string;
   releasedAt?: string;
   contractAddress: string;
+  onChainId?: number;
 }
 
 export interface WalletState {

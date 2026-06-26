@@ -4,8 +4,6 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./AgentRegistry.sol";
-import "./Reputation.sol";
-import "./ExecutionLog.sol";
 
 contract Escrow is Ownable, ReentrancyGuard {
     enum EscrowStatus { Locked, Released, Refunded }
@@ -21,8 +19,6 @@ contract Escrow is Ownable, ReentrancyGuard {
     }
 
     AgentRegistry public registry;
-    Reputation public reputation;
-    ExecutionLog public executionLog;
 
     uint256 private nextEscrowId = 1;
     mapping(uint256 => EscrowRecord) private escrows;
@@ -31,18 +27,9 @@ contract Escrow is Ownable, ReentrancyGuard {
     event EscrowReleased(uint256 indexed escrowId, address indexed receiver, uint256 amount);
     event EscrowRefunded(uint256 indexed escrowId, address indexed receiver, uint256 amount);
 
-    constructor(
-        address _registryAddress,
-        address _reputationAddress,
-        address _executionLogAddress
-    ) Ownable(msg.sender) {
+    constructor(address _registryAddress) Ownable(msg.sender) {
         require(_registryAddress != address(0), "Invalid registry address");
-        require(_reputationAddress != address(0), "Invalid reputation address");
-        require(_executionLogAddress != address(0), "Invalid execution log address");
-        
         registry = AgentRegistry(_registryAddress);
-        reputation = Reputation(_reputationAddress);
-        executionLog = ExecutionLog(_executionLogAddress);
     }
 
     function createEscrow(
@@ -72,13 +59,11 @@ contract Escrow is Ownable, ReentrancyGuard {
     }
 
     function releaseFunds(uint256 escrowId) external nonReentrant {
-        uint256 startGas = gasleft();
         EscrowRecord storage esc = escrows[escrowId];
         require(esc.id != 0, "Escrow contract not found");
         require(esc.status == EscrowStatus.Locked, "Funds already released or refunded");
         
         AgentRegistry.Agent memory agent = registry.getAgent(esc.agentId);
-        // Only owner, client, or authorized oracles/nodes can release
         require(
             msg.sender == owner() || 
             msg.sender == esc.client || 
@@ -88,14 +73,6 @@ contract Escrow is Ownable, ReentrancyGuard {
 
         esc.status = EscrowStatus.Released;
 
-        // Trigger Reputation and ExecutionLog updates
-        reputation.increaseReputation(esc.agentId);
-
-        uint256 gasUsed = startGas - gasleft() + 21000;
-        uint256 executionCost = tx.gasprice > 0 ? tx.gasprice * gasUsed : 5 gwei * gasUsed; // Default to 5 gwei in test environment
-        executionLog.logExecution(esc.callerId, esc.agentId, esc.taskHash, "completed", gasUsed, executionCost);
-
-        // Send payment to callee agent owner
         (bool success, ) = payable(agent.owner).call{value: esc.amount}("");
         require(success, "Payment release failed");
 
@@ -103,13 +80,11 @@ contract Escrow is Ownable, ReentrancyGuard {
     }
 
     function refundFunds(uint256 escrowId) external nonReentrant {
-        uint256 startGas = gasleft();
         EscrowRecord storage esc = escrows[escrowId];
         require(esc.id != 0, "Escrow contract not found");
         require(esc.status == EscrowStatus.Locked, "Funds already released or refunded");
 
         AgentRegistry.Agent memory agent = registry.getAgent(esc.agentId);
-        // Only contract owner, client, or callee agent owner can request refund
         require(
             msg.sender == owner() || 
             msg.sender == esc.client || 
@@ -119,14 +94,6 @@ contract Escrow is Ownable, ReentrancyGuard {
 
         esc.status = EscrowStatus.Refunded;
 
-        // Trigger Reputation and ExecutionLog updates
-        reputation.decreaseReputation(esc.agentId);
-
-        uint256 gasUsed = startGas - gasleft() + 21000;
-        uint256 executionCost = tx.gasprice > 0 ? tx.gasprice * gasUsed : 5 gwei * gasUsed;
-        executionLog.logExecution(esc.callerId, esc.agentId, esc.taskHash, "failed", gasUsed, executionCost);
-
-        // Send payment back to client
         (bool success, ) = payable(esc.client).call{value: esc.amount}("");
         require(success, "Refund payout failed");
 

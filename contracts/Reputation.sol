@@ -31,30 +31,29 @@ contract Reputation is Ownable {
         emit CallerAuthorizationChanged(caller, authorized);
     }
 
-    function increaseReputation(uint256 agentId) external onlyAuthorized {
+    function increaseReputation(uint256 agentId, uint256 points) external onlyAuthorized {
         Score storage score = agentScores[agentId];
+        if (score.completedTasks == 0 && score.failedTasks == 0 && score.trustScore == 0) {
+            score.trustScore = 100;
+        }
         score.completedTasks += 1;
-        score.trustScore = _calculateScore(score.completedTasks, score.failedTasks);
+        score.trustScore = (score.trustScore + points > 100) ? 100 : score.trustScore + points;
         emit ReputationUpdated(agentId, score.completedTasks, score.failedTasks, score.trustScore);
     }
 
-    function decreaseReputation(uint256 agentId) external onlyAuthorized {
+    function decreaseReputation(uint256 agentId, uint256 points) external onlyAuthorized {
         Score storage score = agentScores[agentId];
+        if (score.completedTasks == 0 && score.failedTasks == 0 && score.trustScore == 0) {
+            score.trustScore = 100;
+        }
         score.failedTasks += 1;
-        score.trustScore = _calculateScore(score.completedTasks, score.failedTasks);
+        score.trustScore = (score.trustScore > points) ? score.trustScore - points : 0;
         emit ReputationUpdated(agentId, score.completedTasks, score.failedTasks, score.trustScore);
     }
 
     function getScore(uint256 agentId) external view returns (uint256 completed, uint256 failed, uint256 trustScore) {
         Score memory score = agentScores[agentId];
-        // If it's a new agent with 0 tasks, default trustScore to 100
-        uint256 calculatedTrust = (score.completedTasks == 0 && score.failedTasks == 0) ? 100 : score.trustScore;
+        uint256 calculatedTrust = (score.completedTasks == 0 && score.failedTasks == 0 && score.trustScore == 0) ? 100 : score.trustScore;
         return (score.completedTasks, score.failedTasks, calculatedTrust);
-    }
-
-    function _calculateScore(uint256 completed, uint256 failed) internal pure returns (uint256) {
-        uint256 total = completed + failed;
-        if (total == 0) return 100;
-        return (completed * 100) / total;
     }
 }

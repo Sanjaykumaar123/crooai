@@ -2,15 +2,25 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useApp } from '@/lib/AppContext';
 import { Wallet, Menu, X, ChevronDown, LogOut, ArrowRight, User } from 'lucide-react';
 
 export default function Header() {
   const { wallet, connectWallet, disconnectWallet } = useApp();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const pathname = usePathname();
+
+  const handleCreateAgentClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (wallet.connected) {
+      router.push('/create-agent');
+    } else {
+      connectWallet();
+    }
+  };
 
   const toggleMenu = () => setIsOpen(!isOpen);
   const toggleDropdown = () => setDropdownOpen(!dropdownOpen);
@@ -62,12 +72,12 @@ export default function Header() {
 
         {/* Wallet & Create CTAs */}
         <div className="hidden md:flex items-center space-x-4">
-          <Link
-            href="/create-agent"
-            className="text-sm font-medium text-brand-text-dark hover:text-brand-yellow transition-colors duration-200 mr-2"
+          <button
+            onClick={handleCreateAgentClick}
+            className="text-sm font-medium text-brand-text-dark hover:text-brand-yellow transition-colors duration-200 mr-2 focus:outline-none"
           >
             Create Agent
-          </Link>
+          </button>
 
           {wallet.connected ? (
             <div className="relative">
@@ -76,7 +86,7 @@ export default function Header() {
                 className="flex items-center space-x-2 rounded-full border border-gold-soft bg-white px-4 py-2 text-xs font-semibold text-brand-text-dark shadow-premium-soft hover:bg-neutral-50 transition-all-300"
               >
                 <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>{wallet.address}</span>
+                <span>{wallet.address && wallet.address.length > 13 ? `${wallet.address.substring(0, 6)}...${wallet.address.substring(wallet.address.length - 4)}` : wallet.address}</span>
                 <ChevronDown size={14} className={`transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`} />
               </button>
 
@@ -85,7 +95,7 @@ export default function Header() {
                   <div className="mb-3 border-b border-neutral-100 pb-3">
                     <p className="text-[10px] font-semibold tracking-wider text-brand-text-muted uppercase">My Account</p>
                     <p className="font-heading text-lg font-bold text-brand-text-dark mt-1">
-                      {wallet.balance.toFixed(3)} <span className="text-xs font-semibold text-brand-yellow">CROO</span>
+                      {(wallet.balance ?? 0).toFixed(3)} <span className="text-xs font-semibold text-brand-yellow">CROO</span>
                     </p>
                   </div>
                   
@@ -126,7 +136,7 @@ export default function Header() {
         <div className="flex md:hidden items-center space-x-3">
           {wallet.connected && (
             <span className="text-xs font-bold bg-brand-light-gold text-brand-text-dark px-3 py-1.5 rounded-full border border-gold-soft">
-              {wallet.balance.toFixed(2)} CROO
+              {(wallet.balance ?? 0).toFixed(2)} CROO
             </span>
           )}
           <button
@@ -158,19 +168,21 @@ export default function Header() {
             ))}
           </div>
           <div className="border-t border-neutral-100 pb-3 pt-4 flex flex-col space-y-3">
-            <Link
-              href="/create-agent"
-              onClick={() => setIsOpen(false)}
+            <button
+              onClick={(e) => {
+                handleCreateAgentClick(e);
+                setIsOpen(false);
+              }}
               className="flex w-full items-center justify-center rounded-xl border border-gold-soft px-4 py-3 text-sm font-semibold text-brand-text-dark hover:bg-neutral-50"
             >
               Create Agent
-            </Link>
+            </button>
 
             {wallet.connected ? (
               <div className="flex flex-col space-y-2">
                 <div className="flex items-center justify-between rounded-xl bg-brand-light-gold/30 p-3 border border-gold-soft">
-                  <div className="text-xs font-semibold text-brand-text-dark">{wallet.address}</div>
-                  <div className="text-xs font-bold text-brand-yellow">{wallet.balance.toFixed(3)} CROO</div>
+                  <div className="text-xs font-semibold text-brand-text-dark">{wallet.address && wallet.address.length > 13 ? `${wallet.address.substring(0, 6)}...${wallet.address.substring(wallet.address.length - 4)}` : wallet.address}</div>
+                  <div className="text-xs font-bold text-brand-yellow">{(wallet.balance ?? 0).toFixed(3)} CROO</div>
                 </div>
                 <button
                   onClick={() => {

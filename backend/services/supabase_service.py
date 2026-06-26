@@ -30,6 +30,10 @@ def get_db():
 def init_db():
     from backend.models.agent import Base as AgentBase
     from backend.models.execution import Base as ExecutionBase
+    from backend.models.agent_relationship import Base as RelationshipBase
+    from backend.a2a.state import Base as A2ABase
     
     AgentBase.metadata.create_all(bind=engine)
     ExecutionBase.metadata.create_all(bind=engine)
+    RelationshipBase.metadata.create_all(bind=engine)
+    A2ABase.metadata.create_all(bind=engine)

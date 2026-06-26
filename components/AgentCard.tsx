@@ -13,10 +13,12 @@ interface AgentCardProps {
 }
 
 export default function AgentCard({ agent }: AgentCardProps) {
-  const { hireAgent, wallet } = useApp();
+  const { hireAgent, wallet, escrows } = useApp();
   const [isHiring, setIsHiring] = useState(false);
   const [hired, setHired] = useState(false);
   const router = useRouter();
+
+  const isAlreadyHired = escrows.some((e) => e.agentId === agent.id);
 
   const getCategoryStyles = (cat: string) => {
     switch (cat) {
@@ -43,22 +45,27 @@ export default function AgentCard({ agent }: AgentCardProps) {
     e.preventDefault(); // Stop navigation
     e.stopPropagation();
 
+    if (isAlreadyHired) {
+      router.push(`/agent/${agent.id}`);
+      return;
+    }
+
     if (!wallet.connected) {
       alert('Please connect your wallet first!');
       return;
     }
 
     setIsHiring(true);
-    // Simulate smart contract interactions
-    await new Promise((resolve) => setTimeout(resolve, 1500));
     
-    const success = hireAgent(agent.id);
+    const result = await hireAgent(agent.id);
     setIsHiring(false);
 
-    if (success) {
+    if (result.success) {
       setHired(true);
       setTimeout(() => setHired(false), 3000);
       router.push('/escrow'); // Redirect to escrow page to see their locked funds
+    } else {
+      alert(`Hiring failed: ${result.error || 'Transaction rejected or failed'}`);
     }
   };
 
@@ -105,7 +112,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
         <div className="mt-4 grid grid-cols-2 gap-2 border-t border-neutral-50 pt-4 text-xs">
           <div>
             <span className="block text-brand-text-muted">Tasks Completed</span>
-            <span className="font-bold text-brand-text-dark">{agent.tasksCompleted.toLocaleString()}</span>
+            <span className="font-bold text-brand-text-dark">{agent.tasksCompleted.toLocaleString('en-US')}</span>
           </div>
           <div>
             <span className="block text-brand-text-muted">Success Rate</span>
@@ -130,17 +137,17 @@ export default function AgentCard({ agent }: AgentCardProps) {
           onClick={handleHireClick}
           disabled={isHiring}
           className={`flex items-center space-x-1.5 rounded-xl px-4 py-2.5 text-sm font-bold transition-all duration-300 ${
-            hired
+            hired || isAlreadyHired
               ? 'bg-emerald-500 text-white'
               : 'bg-brand-yellow hover:bg-[#F59E0B] text-white shadow-premium-soft'
           } active:scale-95`}
         >
           {isHiring ? (
             <div className="h-4.5 w-4.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-          ) : hired ? (
+          ) : (hired || isAlreadyHired) ? (
             <>
               <Check className="h-3.5 w-3.5" />
-              <span>Hired!</span>
+              <span>✓ Hired</span>
             </>
           ) : (
             <>

@@ -12,6 +12,7 @@ from backend.agents.report_agent import ReportAgent
 from backend.services.blockchain_service import BlockchainService
 from backend.services.supabase_service import SessionLocal
 from backend.models.execution import ExecutionModel
+from backend.models.agent_relationship import AgentRelationshipModel
 
 class AgentState(TypedDict):
     query: str
@@ -115,17 +116,32 @@ def logging_node(state: AgentState) -> Dict[str, Any]:
         task_desc = f"{state['query']}: {handoff['task']}"
         gas_wei = int(handoff["gas"] * 5 * 10**9) # converted to gas-cost in wei
         
-        current_nonce = start_nonce + i if start_nonce is not None else None
+        escrow_nonce = start_nonce + (i * 3) if start_nonce is not None else None
+        release_nonce = start_nonce + (i * 3) + 1 if start_nonce is not None else None
+        reputation_nonce = start_nonce + (i * 3) + 2 if start_nonce is not None else None
         
-        # Log to Sepolia Blockchain
-        tx_hash = BlockchainService.log_execution_on_chain(
-            caller_agent_id=caller_id,
-            callee_agent_id=callee_id,
+        # 1. Create Escrow on-chain (hiring callee agent)
+        price_wei = int(handoff["cost"] * 10**18)
+        escrow_id, escrow_tx = BlockchainService.create_escrow_on_chain(
+            agent_id=callee_id,
+            caller_id=caller_id,
             task_query=task_desc,
-            status="completed",
-            gas_used=handoff["gas"],
-            execution_cost_wei=gas_wei,
-            nonce=current_nonce
+            payment_wei=price_wei,
+            nonce=escrow_nonce
+        )
+        
+        # 2. Release Escrow on-chain (payout callee agent and log execution)
+        tx_hash = BlockchainService.release_escrow_on_chain(
+            escrow_id=escrow_id,
+            nonce=release_nonce
+        )
+        
+        # 3. Update Reputation on-chain
+        reputation_tx = BlockchainService.update_reputation_on_chain(
+            agent_id=callee_id,
+            points=2, # +2 for success
+            is_success=True,
+            nonce=reputation_nonce
         )
         
         # Save to database (Supabase/SQLite)
@@ -144,6 +160,27 @@ def logging_node(state: AgentState) -> Dict[str, Any]:
         )
         
         db.add(db_exec)
+        
+        # Save A2A Relationship to database
+        agent_names = {
+            1: "Research Agent",
+            2: "News Agent",
+            3: "Analytics Agent",
+            4: "Verification Agent",
+            5: "Report Agent"
+        }
+        caller_name = agent_names.get(caller_id, "User")
+        callee_name = agent_names.get(callee_id, "Agent")
+        
+        db_rel = AgentRelationshipModel(
+            id=str(uuid.uuid4()),
+            caller_agent=caller_name,
+            callee_agent=callee_name,
+            cost=handoff["cost"],
+            status="completed",
+            timestamp=datetime.utcnow()
+        )
+        db.add(db_rel)
         logged_steps.append({
             "id": exec_id,
             "caller": caller_id,
