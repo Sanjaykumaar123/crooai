@@ -14,6 +14,19 @@ router = APIRouter(prefix="/api/a2a", tags=["A2A Swarm"])
 class SwarmExecuteRequest(BaseModel):
     query: str
     wallet: str
+    protocol_mode: str = "custom"
+
+class SwarmClassifyRequest(BaseModel):
+    query: str
+
+@router.post("/classify")
+def classify_swarm_api(payload: SwarmClassifyRequest):
+    if not payload.query.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty")
+    
+    from backend.a2a.router import AgentRouter
+    res = AgentRouter.classify_query(payload.query)
+    return res
 
 @router.post("/execute")
 def execute_swarm_api(payload: SwarmExecuteRequest):
@@ -21,7 +34,7 @@ def execute_swarm_api(payload: SwarmExecuteRequest):
         raise HTTPException(status_code=400, detail="Query cannot be empty")
     
     # Trigger orchestrator
-    res = SwarmOrchestrator.execute_swarm(payload.query, payload.wallet)
+    res = SwarmOrchestrator.execute_swarm(payload.query, payload.wallet, payload.protocol_mode)
     return res
 
 @router.get("/status/{execution_id}")

@@ -32,7 +32,9 @@ class SwarmOrchestrator:
                 ],
                 "report": "",
                 "transactions": [],
-                "agents_used": []
+                "agents_used": [],
+                "agent_states": {},
+                "console_logs": []
             }
 
         # 2. Save to database
@@ -49,7 +51,7 @@ class SwarmOrchestrator:
         db.close()
 
     @staticmethod
-    def execute_swarm_background(execution_id: str, query: str, wallet: str) -> None:
+    def execute_swarm_background(execution_id: str, query: str, wallet: str, protocol_mode: str = "custom") -> None:
         """The actual swarm task runner to be executed in a background thread."""
         start_time = time.time()
         try:
@@ -58,6 +60,7 @@ class SwarmOrchestrator:
                 "execution_id": execution_id,
                 "query": query,
                 "wallet": wallet,
+                "protocol_mode": protocol_mode,
                 "agents_used": [],
                 "current_agent": "Research",
                 "progress": 10,
@@ -86,32 +89,34 @@ class SwarmOrchestrator:
             # Map the compiled result to memory
             elapsed = time.time() - start_time
             txs = result_state.get("blockchain_txs", {})
+            is_cap = result_state.get("protocol_mode") == "cap"
             
             transactions_list = [
                 {
-                    "type": "Escrow TX",
+                    "type": "CAP Escrow Lock TX" if is_cap else "Escrow TX",
                     "tx_hash": txs.get("escrow", "0x0000000000000000000000000000000000000000"),
-                    "gas": "150,000 Gwei",
-                    "network": txs.get("network", "Base Sepolia"),
+                    "gas": "120,000 Gwei" if is_cap else "150,000 Gwei",
+                    "network": "Base Mainnet (CAP)" if is_cap else txs.get("network", "Base Sepolia"),
                     "status": txs.get("confirmation", "Confirmed")
                 },
                 {
-                    "type": "Execution Log TX",
+                    "type": "CAP Order Delivery TX" if is_cap else "Execution Log TX",
                     "tx_hash": txs.get("log", "0x0000000000000000000000000000000000000000"),
-                    "gas": "45,050 Gwei",
-                    "network": txs.get("network", "Base Sepolia"),
+                    "gas": "85,000 Gwei" if is_cap else "45,050 Gwei",
+                    "network": "Base Mainnet (CAP)" if is_cap else txs.get("network", "Base Sepolia"),
                     "status": txs.get("confirmation", "Confirmed")
                 },
                 {
-                    "type": "Reputation TX",
+                    "type": "CAP Reputation Reward TX" if is_cap else "Reputation TX",
                     "tx_hash": txs.get("reputation", "0x0000000000000000000000000000000000000000"),
-                    "gas": "62,000 Gwei",
-                    "network": txs.get("network", "Base Sepolia"),
+                    "gas": "48,000 Gwei" if is_cap else "62,000 Gwei",
+                    "network": "Base Mainnet (CAP)" if is_cap else txs.get("network", "Base Sepolia"),
                     "status": txs.get("confirmation", "Confirmed")
                 }
             ]
 
             with EXECUTIONS_LOCK:
+                existing = ACTIVE_EXECUTIONS.get(execution_id, {})
                 ACTIVE_EXECUTIONS[execution_id] = {
                     "progress": 100,
                     "current_agent": "Completed",
@@ -119,7 +124,9 @@ class SwarmOrchestrator:
                     "timeline": result_state.get("timeline", []),
                     "report": result_state.get("report_output", ""),
                     "transactions": transactions_list,
-                    "agents_used": result_state.get("agents_used", [])
+                    "agents_used": result_state.get("agents_used", []),
+                    "agent_states": existing.get("agent_states", {}),
+                    "console_logs": existing.get("console_logs", [])
                 }
 
             # Update Database
@@ -136,6 +143,7 @@ class SwarmOrchestrator:
             elapsed = time.time() - start_time
             print(f"[Orchestrator Error] Execution {execution_id} failed: {e}")
             with EXECUTIONS_LOCK:
+                existing = ACTIVE_EXECUTIONS.get(execution_id, {})
                 ACTIVE_EXECUTIONS[execution_id] = {
                     "progress": 100,
                     "current_agent": "Failed",
@@ -150,7 +158,9 @@ class SwarmOrchestrator:
                     ],
                     "report": f"Swarm Execution failed during run. Partial report could not be generated. Error detail: {e}",
                     "transactions": [],
-                    "agents_used": []
+                    "agents_used": [],
+                    "agent_states": existing.get("agent_states", {}),
+                    "console_logs": existing.get("console_logs", [])
                 }
             
             db = SessionLocal()
@@ -163,7 +173,7 @@ class SwarmOrchestrator:
             db.close()
 
     @staticmethod
-    def execute_swarm(query: str, wallet_address: str) -> Dict[str, Any]:
+    def execute_swarm(query: str, wallet_address: str, protocol_mode: str = "custom") -> Dict[str, Any]:
         """Synchronous entry point that returns the immediate format required by orchestrator spec."""
         execution_id = str(uuid.uuid4())
         
@@ -173,7 +183,7 @@ class SwarmOrchestrator:
         # Run background thread
         thread = threading.Thread(
             target=SwarmOrchestrator.execute_swarm_background,
-            args=(execution_id, query, wallet_address)
+            args=(execution_id, query, wallet_address, protocol_mode)
         )
         thread.start()
         
@@ -191,7 +201,9 @@ class SwarmOrchestrator:
                 return {
                     "progress": data["progress"],
                     "current_agent": data["current_agent"],
-                    "timeline": data["timeline"]
+                    "timeline": data["timeline"],
+                    "agent_states": data.get("agent_states", {}),
+                    "console_logs": data.get("console_logs", [])
                 }
         
         # Check database fallback
@@ -203,13 +215,17 @@ class SwarmOrchestrator:
             return {
                 "progress": 100 if record.status in ["completed", "failed"] else 50,
                 "current_agent": "Completed" if record.status == "completed" else "Running",
-                "timeline": []
+                "timeline": [],
+                "agent_states": {},
+                "console_logs": []
             }
             
         return {
             "progress": 0,
             "current_agent": "Unknown",
-            "timeline": []
+            "timeline": [],
+            "agent_states": {},
+            "console_logs": []
         }
 
     @staticmethod
@@ -223,7 +239,9 @@ class SwarmOrchestrator:
                     "report": data["report"],
                     "transactions": data["transactions"],
                     "timeline": data["timeline"],
-                    "agents_used": data["agents_used"]
+                    "agents_used": data["agents_used"],
+                    "agent_states": data.get("agent_states", {}),
+                    "console_logs": data.get("console_logs", [])
                 }
                 
         # Check database fallback
@@ -237,7 +255,9 @@ class SwarmOrchestrator:
                 "report": f"Report for query: {record.query}. Status: {record.status}",
                 "transactions": [],
                 "timeline": [],
-                "agents_used": []
+                "agents_used": [],
+                "agent_states": {},
+                "console_logs": []
             }
             
         return {
@@ -245,5 +265,7 @@ class SwarmOrchestrator:
             "report": "Execution not found",
             "transactions": [],
             "timeline": [],
-            "agents_used": []
+            "agents_used": [],
+            "agent_states": {},
+            "console_logs": []
         }

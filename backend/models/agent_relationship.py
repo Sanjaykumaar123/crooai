@@ -10,6 +10,7 @@ class AgentRelationshipModel(Base):
     id = Column(String, primary_key=True)
     caller_agent = Column(String, nullable=False)
     callee_agent = Column(String, nullable=False)
+    execution_id = Column(String, nullable=True)
     cost = Column(Float, default=0.0)
     status = Column(String, default="completed")
     timestamp = Column(DateTime, default=datetime.utcnow)

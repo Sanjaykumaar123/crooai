@@ -1,5 +1,6 @@
 import re
-from typing import List
+import json
+from typing import List, Dict, Any
 from backend.services.gemini_service import GeminiService
 
 class AgentRouter:
@@ -10,50 +11,131 @@ class AgentRouter:
         Returns a list of agent names (excluding Research and Report, which are added automatically
         at the start and end of the workflow).
         """
+        classification = AgentRouter.classify_query(query)
+        selected = classification["selected_agents"]
+        # Filter out Research and Report for backward compatibility in routing nodes
+        sub_agents = [s for s in selected if s not in ["Research", "Report"]]
+        return sub_agents
+
+    @staticmethod
+    def classify_query(query: str) -> Dict[str, Any]:
+        """
+        Classifies the query domain, estimates confidence, selects appropriate agents,
+        calculates estimated costs & times, and explains fallback decisions.
+        Uses fast rule-based matching for recognized domains and only calls LLM
+        for completely unrecognized queries.
+        """
         q_lower = query.lower()
-        
-        # Rule-based routing to ensure strict compliance with user examples
-        if any(keyword in q_lower for keyword in ["tesla", "stock", "market", "ev", "nvidia", "apple", "finance", "crypto", "price", "valuation"]):
-            # Analyze Tesla Stock or EV Market, etc.
-            # "Analyze Tesla Stock" -> Research, News, Analytics, Verification
-            return ["News", "Analytics", "Verification"]
-            
-        if any(keyword in q_lower for keyword in ["solidity", "contract", "audit", "security", "smart contract", "code", "bug"]):
-            # Audit Solidity Contract -> Code Review, Security, Verification
-            return ["Code Review", "Security", "Verification"]
-            
-        if any(keyword in q_lower for keyword in ["news", "summarize", "ai news", "feed", "latest"]):
-            # Summarize AI News -> News, Report (which has Report anyway, but News is the main worker agent)
-            return ["News"]
-            
-        # Fallback to LLM router to dynamically analyze the task
+
+        # Rule-based domain detection - returns instantly without LLM
+        domain = None
+        confidence = 98
+        selected = None
+        explanation = ""
+
+        if any(keyword in q_lower for keyword in [
+            "zoho", "tesla", "stock", "market", "ev", "nvidia", "apple",
+            "finance", "crypto", "price", "valuation", "nifty", "sensex",
+            "share", "invest", "portfolio", "equity", "ipo", "bull", "bear"
+        ]):
+            domain = "Finance"
+            confidence = 99
+            selected = ["Research", "News", "Analytics", "Verification", "Report"]
+
+        elif any(keyword in q_lower for keyword in [
+            "solidity", "contract", "audit", "smart contract", "reentrancy", "exploit", "defi", "bytecode", "evm"
+        ]) or "audit solidity contract" in q_lower:
+            domain = "Smart Contract Audit"
+            confidence = 98
+            selected = ["Research", "Code Review", "Verification", "Report"]
+
+        elif any(keyword in q_lower for keyword in [
+            "compare", "comparison", "openai", "anthropic", "gpt", "claude", "gemini", "versus", "vs", "llm"
+        ]) or "compare gpt and claude" in q_lower:
+            domain = "AI Comparison"
+            confidence = 97
+            selected = ["Research", "Analytics", "Report"]
+            explanation = "Analytics Agent computes comparative performance and cost metrics."
+
+        elif any(keyword in q_lower for keyword in [
+            "quantum", "physics", "computing", "explain"
+        ]) or "explain quantum computing" in q_lower:
+            domain = "Quantum Computing"
+            confidence = 95
+            selected = ["Research", "Report"]
+
+        # Rule-based match: return immediately without calling LLM
+        if domain is not None:
+            sub_agents = [s for s in selected if s not in ["Research", "Report"]]
+            est_time = 6 + len(sub_agents) * 3
+            est_cost = 0.010 + len(sub_agents) * 0.004
+            return {
+                "domain": domain,
+                "confidence": confidence,
+                "selected_agents": selected,
+                "estimated_cost": round(est_cost, 3),
+                "estimated_time": est_time,
+                "expected_parallel_jobs": len(sub_agents),
+                "explanation": explanation
+            }
+
+        # For unrecognized queries, use LLM for smarter routing
         system_instruction = (
-            "You are a routing orchestrator for an AI agent swarm. "
-            "Select the minimum required specialized agents to complete the query. "
-            "The available agents are:\n"
-            "- News: Gathers latest information, news, sentiment.\n"
-            "- Analytics: Calculations, volatility regression, financial trends.\n"
-            "- Code Review: Analyzes code structure, compliance, standard protocols.\n"
-            "- Security: Vulnerabilities, smart contract auditing, exploits.\n"
-            "- Verification: Verifies facts, cross-checks claims, compliance checks.\n"
-            "\n"
-            "Respond ONLY with a comma-separated list of the selected agents (e.g. 'News, Analytics, Verification'). "
-            "Do not include Research or Report agents in your response."
+            "You are a routing orchestrator for a decentralized AI workforce swarm. "
+            "Classify the query into a domain, choose the required agents "
+            "(from: News, Analytics, Code Review, Security, Verification), "
+            "assign an integer confidence percentage (0-100), and write a one-sentence "
+            "explanation if a specialized agent is not available and you are fallback routing "
+            "to generic agents.\n\n"
+            "Return ONLY a valid JSON block with these keys:\n"
+            "{\n"
+            "  \"domain\": \"Domain Name\",\n"
+            "  \"confidence\": 92,\n"
+            "  \"selected_agents\": [\"News\", \"Analytics\"],\n"
+            "  \"explanation\": \"No dedicated agent found. Reusing News & Analytics.\"\n"
+            "}"
         )
-        
+
         try:
             response = GeminiService.generate(
-                prompt=f"Task: '{query}'\nDetermine the list of required agents.",
+                prompt=f"Task: '{query}'",
                 system_instruction=system_instruction
             )
-            # Parse response
-            selected = [name.strip() for name in response.split(",") if name.strip()]
+            cleaned = response.strip()
+            if cleaned.startswith("```json"):
+                cleaned = cleaned.split("```json")[1].split("```")[0].strip()
+            elif cleaned.startswith("```"):
+                cleaned = cleaned.split("```")[1].split("```")[0].strip()
+
+            data = json.loads(cleaned)
+
+            sub_agents = data.get("selected_agents", [])
             valid_agents = ["News", "Analytics", "Code Review", "Security", "Verification"]
-            filtered = [s for s in selected if s in valid_agents]
-            if filtered:
-                return filtered
+            filtered_sub = [s for s in sub_agents if s in valid_agents]
+
+            selected_all = ["Research"] + filtered_sub + ["Report"]
+            est_time = 6 + len(filtered_sub) * 3
+            est_cost = 0.010 + len(filtered_sub) * 0.004
+
+            return {
+                "domain": data.get("domain", "General Knowledge"),
+                "confidence": data.get("confidence", 92),
+                "selected_agents": selected_all,
+                "estimated_cost": round(est_cost, 3),
+                "estimated_time": est_time,
+                "expected_parallel_jobs": len(filtered_sub),
+                "explanation": data.get("explanation", "No specialized agent matched. Using General Knowledge Pipeline.")
+            }
         except Exception:
-            pass
-            
-        # Default fallback
-        return ["News", "Analytics", "Verification"]
+            pass  # fall through to final fallback
+
+        # Final fallback: minimal General Knowledge pipeline
+        return {
+            "domain": "General Knowledge",
+            "confidence": 92,
+            "selected_agents": ["Research", "Report"],
+            "estimated_cost": 0.010,
+            "estimated_time": 6,
+            "expected_parallel_jobs": 0,
+            "explanation": "No specialized agent found. Using General Knowledge Pipeline."
+        }
